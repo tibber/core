@@ -255,6 +255,7 @@ select = [
     "SIM117", # Merge with-statements that use the same scope
     "SIM401", # Use get from dict with default instead of an if block
     "T20",  # flake8-print
+    "TRY004", # Prefer TypeError exception for invalid type
     "UP",  # pyupgrade
     "W",  # pycodestyle
 ]

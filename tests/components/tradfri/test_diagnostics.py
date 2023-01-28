@@ -1,32 +1,37 @@
 """Tests for Tradfri diagnostics."""
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from __future__ import annotations
+
+import json
+from typing import Any
+from unittest.mock import MagicMock, Mock
 
 from aiohttp import ClientSession
 import pytest
+from pytradfri.device import Device
+from pytradfri.device.air_purifier import AirPurifier
 
+from homeassistant.components.tradfri.const import DOMAIN
 from homeassistant.core import HomeAssistant
 
 from .common import setup_integration
-from .test_sensor import mock_fan
 
+from tests.common import load_fixture
 from tests.components.diagnostics import get_diagnostics_for_config_entry
 
 
-@pytest.fixture(autouse=True)
-def setup(request):
-    """
-    Set up patches for pytradfri methods for the fan platform.
+@pytest.fixture(scope="module")
+def air_purifier_response() -> dict[str, Any]:
+    """Return an air purifier response."""
+    return json.loads(load_fixture("air_purifier.json", DOMAIN))
 
-    This is used in test_fan as well as in test_sensor.
-    """
-    with patch(
-        "pytradfri.device.AirPurifierControl.raw",
-        new_callable=PropertyMock,
-        return_value=[{"mock": "mock"}],
-    ), patch(
-        "pytradfri.device.AirPurifierControl.air_purifiers",
-    ):
-        yield
+
+@pytest.fixture
+def air_purifier(air_purifier_response) -> AirPurifier:
+    """Return air purifier."""
+    device = Device(air_purifier_response)
+    air_purifier_control = device.air_purifier_control
+    assert air_purifier_control
+    return air_purifier_control.air_purifiers[0]
 
 
 async def test_diagnostics(
@@ -34,23 +39,16 @@ async def test_diagnostics(
     hass_client: ClientSession,
     mock_gateway: Mock,
     mock_api_factory: MagicMock,
+    air_purifier: AirPurifier,
 ) -> None:
     """Test diagnostics for config entry."""
-    mock_gateway.mock_devices.append(
-        # Add a fan
-        mock_fan(
-            test_state={
-                "fan_speed": 10,
-                "air_quality": 42,
-                "filter_lifetime_remaining": 120,
-            }
-        )
-    )
+    device = air_purifier.device
+    mock_gateway.mock_devices.append(device)
+    config_entry = await setup_integration(hass)
 
-    init_integration = await setup_integration(hass)
-
-    result = await get_diagnostics_for_config_entry(hass, hass_client, init_integration)
+    result = await get_diagnostics_for_config_entry(hass, hass_client, config_entry)
 
     assert isinstance(result, dict)
     assert result["gateway_version"] == "1.2.1234"
     assert len(result["device_data"]) == 1
+    assert result["device_data"][0] == "STARKVIND Air purifier"
